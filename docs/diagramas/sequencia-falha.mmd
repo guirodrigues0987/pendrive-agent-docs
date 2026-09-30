@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant Usuario as Usuário
+    participant Agent as agent.py
+    participant Tools as tools.py
+    participant History as history.py
+    participant ScansDir as Diretorio de scans (scans/)
+    participant LLM as Servidor de Inferencia Local (llama-server / Ollama)
+
+    Usuario->>Agent: executa python agent.py --host --model
+
+    Note over Agent,Tools: coleta de processos, conexoes e itens de inicializacao (identico ao fluxo principal, ver sequencia.mmd)
+    Agent->>Tools: coleta dados do sistema
+    Tools-->>Agent: processos, conexoes e itens de inicializacao coletados
+
+    Agent->>History: pede snapshot anterior e calcula diferenca
+    History-->>Agent: snapshot anterior e diferencas
+
+    Agent->>History: salva snapshot coletado
+    History->>ScansDir: grava snapshot JSON timestampado
+    ScansDir-->>History: confirmacao (caminho do arquivo)
+    History-->>Agent: caminho do snapshot salvo
+
+    Note over Agent,ScansDir: o snapshot ja esta salvo em disco neste ponto, independente do que acontecer a seguir
+
+    Agent->>Agent: monta prompt textual com dados coletados e diferencas
+
+    alt Servidor fora do ar, recusa conexao ou responde com erro HTTP
+        Agent->>LLM: POST /v1/chat/completions (prompt)
+        LLM--xAgent: falha de conexao (urllib.error.URLError) ou erro HTTP (urllib.error.HTTPError)
+        Agent->>Agent: imprime "[ERRO] Nao consegui falar com o servidor LLM em {host}" (ou o codigo HTTP e o corpo da resposta)
+        Agent->>Usuario: encerra o processo (sys.exit(1)) - nenhum resumo e exibido
+        Note over Agent: tratado explicitamente no codigo (agent.py, call_llm - except HTTPError / except URLError)
+    else Servidor responde HTTP 200, mas com corpo vazio, JSON invalido, ou sem "choices"/"message"/"content"
+        Agent->>LLM: POST /v1/chat/completions (prompt)
+        LLM-->>Agent: resposta HTTP 200 vazia, malformada ou com estrutura inesperada
+        Note over Agent: LACUNA NO CODIGO REAL - nao ha tratamento para este caso
+        Agent--xUsuario: processo encerra com excecao nao tratada (traceback), sem mensagem amigavel e sem sys.exit(1) controlado
+    end
