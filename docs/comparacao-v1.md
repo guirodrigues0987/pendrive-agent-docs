@@ -1,5 +1,11 @@
 # Comparação — Diagramas v1 vs. Código Real
 
+> **Nota.** Este documento registra o estado de `docs/descricao.md` *antes*
+> dos ajustes. As omissões apontadas na seção 3 (por exemplo, a ordem do
+> salvamento do snapshot e o momento de carga da whitelist) valiam para a
+> descrição daquela época; `docs/descricao.md` foi atualizado depois com as
+> informações que faltavam.
+
 Este documento confronta `docs/diagramas/estrutural-v1.mmd` e
 `docs/diagramas/sequencia-v1.mmd` — produzidos a partir apenas de
 `docs/descricao.md`, sem acesso ao código — com o código-fonte real em
