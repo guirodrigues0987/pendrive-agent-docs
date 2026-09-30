@@ -47,7 +47,7 @@ flowchart TD
     Usuario["Usuário (linha de comando)"]
 
     subgraph Pendrive["Processo do Agente (Python) - roda a partir do pendrive"]
-        Agent["agent.py - orquestracao, coleta e construcao de prompt"]
+        Agent["agent.py - orquestracao e construcao de prompt"]
         Tools["tools.py - coleta de dados do sistema"]
         History["history.py - historico e diff de snapshots"]
     end
