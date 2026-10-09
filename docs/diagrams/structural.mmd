@@ -1,0 +1,24 @@
+flowchart TD
+    User["User (command line)"]
+
+    subgraph Pendrive["Agent Process (Python) - runs from the USB drive"]
+        Agent["agent.py - orchestration and prompt building"]
+        Tools["tools.py - system data collection"]
+        History["history.py - snapshot history and diff"]
+    end
+
+    Whitelist[("whitelist.json (configuration)")]
+    ScansDir[("Scans directory (scans/)")]
+    OS["Host Operating System (Windows / Linux)"]
+    LLM["Local Inference Server (llama-server / Ollama)"]
+
+    User -->|"1. runs python agent.py --host --model"| Agent
+    Agent -->|"2. triggers the collections (processes, connections, startup items)"| Tools
+    Tools -->|"psutil / winreg / systemctl / crontab / autostart"| OS
+    Tools -->|"loaded once, at module import"| Whitelist
+    Agent -->|"3. asks for previous snapshot and computes diff"| History
+    Agent -->|"4. saves the collected snapshot (before calling the LLM)"| History
+    History -->|"reads and writes JSON snapshots"| ScansDir
+    Agent -->|"5. POST /v1/chat/completions (prompt)"| LLM
+    LLM -->|"6. response with summary"| Agent
+    Agent -->|"7. prints scan summary"| User

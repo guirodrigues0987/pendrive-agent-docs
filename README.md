@@ -1,272 +1,278 @@
-# PendriveAgent — Documentação
+# PendriveAgent - Documentation
 
-PendriveAgent é um agente de triagem de segurança que roda inteiramente a
-partir de um pendrive: coleta processos em execução, conexões de rede
-ativas e itens de inicialização automática do computador em que é ligado,
-compara com o scan anterior e usa um modelo de linguagem local (via
-llama.cpp/llama-server ou Ollama) só para interpretar esses dados e
-escrever um resumo em português. Não há nuvem, não há telemetria, não há
-instalação — tudo roda localmente, inclusive o interpretador Python e o
-motor de inferência, se o pendrive vier com eles. O próprio sistema se
-declara uma camada de leitura e triagem, não um antivírus.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Este repositório documenta a arquitetura desse sistema como exercício de
-"diagrams as code" de uma pós-graduação. Ele não contém o código-fonte do
-PendriveAgent — só a descrição, os diagramas derivados dela, e o histórico
-de como esses diagramas foram corrigidos depois de confrontados com o
-código real.
+PendriveAgent is a security triage agent that runs entirely from a USB drive: it
+collects running processes, active network connections and automatic startup
+items from the computer it is plugged into, compares them with the previous
+scan, and uses a local language model (via llama.cpp/llama-server or Ollama)
+only to interpret that data and write a summary. There is no cloud, no
+telemetry, no installation - everything runs locally, including the Python
+interpreter and the inference engine, if the USB drive ships with them. The
+system itself declares that it is a reading and triage layer, not an antivirus.
 
-## A descrição completa
+This repository documents the architecture of that system as a "diagrams as
+code" exercise from a postgraduate course. It does not contain the PendriveAgent
+source code (see
+[Pendrive_agent_HealthCheck](https://github.com/guirodrigues0987/Pendrive_agent_HealthCheck)
+for that) - only the description, the diagrams derived from it, and the history
+of how those diagrams were corrected after being checked against the real code.
 
-A descrição arquitetural está em [`docs/descricao.md`](docs/descricao.md),
-escrita no nível 2 do C4 (containers). Em resumo: o sistema roda como um
-único processo Python, que reúne `agent.py`, `tools.py` e `history.py`, e
-esse processo conversa com três coisas de fora dele — o sistema
-operacional do host (via `psutil`, `winreg`, `systemctl` e `crontab`,
-dependendo da plataforma), um arquivo de configuração de whitelist editado
-à mão, e um servidor de inferência local compatível com a API de chat
-completions da OpenAI. O documento também registra as restrições do
-sistema — execução 100% local, a partir do pendrive, com modelos pequenos
-e quantizados — e fecha com uma seção de lacunas honesta sobre o que o
-código não decide: não há testes automatizados, não há rotação dos
-snapshots antigos em `scans/`, Windows e Linux têm cobertura desigual de
-itens de inicialização, e o tratamento de erro da chamada ao modelo de
-linguagem é só parcial.
+## Repository layout
 
-## Diagramas
+```
+docs/
+├── description.md                 # C4 level 2 architecture description
+├── decisions-and-adjustments.md   # Architecture decisions and diagram corrections
+├── v1-comparison.md               # v1 diagrams vs. the real code
+└── diagrams/                      # Mermaid sources (final and v1)
+```
 
-Os diagramas abaixo são a versão final, corrigida depois de ler o código
-real. As versões iniciais, produzidas só a partir da descrição em prosa,
-continuam na pasta `docs/diagramas/` com o sufixo `-v1`, para permitir a
-comparação antes/depois.
+## The full description
 
-### Visão de containers
+The architecture description is in [`docs/description.md`](docs/description.md),
+written at C4 level 2 (containers). In short: the system runs as a single Python
+process, which brings together `agent.py`, `tools.py` and `history.py`, and that
+process talks to three things outside it - the host operating system (via
+`psutil`, `winreg`, `systemctl` and `crontab`, depending on the platform), a
+hand-edited whitelist configuration file, and a local inference server
+compatible with the OpenAI chat completions API. The document also records the
+system's constraints - 100% local execution, from the USB drive, with small
+quantized models - and closes with an honest gaps section about what the code
+does not decide: there are no automated tests, there is no rotation of old
+snapshots in `scans/`, Windows and Linux have uneven coverage of startup items,
+and error handling of the language model call is only partial.
+
+## Diagrams
+
+The diagrams below are the final version, corrected after reading the real code.
+The initial versions, produced only from the prose description, remain in the
+`docs/diagrams/` folder with the `-v1` suffix, to allow the before/after
+comparison.
+
+### Container view
 
 ```mermaid
 flowchart TD
-    Usuario["Usuário (linha de comando)"]
+    User["User (command line)"]
 
-    subgraph Pendrive["Processo do Agente (Python) - roda a partir do pendrive"]
-        Agent["agent.py - orquestracao e construcao de prompt"]
-        Tools["tools.py - coleta de dados do sistema"]
-        History["history.py - historico e diff de snapshots"]
+    subgraph Pendrive["Agent Process (Python) - runs from the USB drive"]
+        Agent["agent.py - orchestration and prompt building"]
+        Tools["tools.py - system data collection"]
+        History["history.py - snapshot history and diff"]
     end
 
-    Whitelist[("whitelist.json (configuracao)")]
-    ScansDir[("Diretorio de scans (scans/)")]
-    SO["Sistema Operacional do Host (Windows / Linux)"]
-    LLM["Servidor de Inferencia Local (llama-server / Ollama)"]
+    Whitelist[("whitelist.json (configuration)")]
+    ScansDir[("Scans directory (scans/)")]
+    OS["Host Operating System (Windows / Linux)"]
+    LLM["Local Inference Server (llama-server / Ollama)"]
 
-    Usuario -->|"1. executa python agent.py --host --model"| Agent
-    Agent -->|"2. aciona as coletas (processos, conexoes, itens de inicializacao)"| Tools
-    Tools -->|"psutil / winreg / systemctl / crontab / autostart"| SO
-    Tools -->|"carrega uma unica vez, na importacao do modulo"| Whitelist
-    Agent -->|"3. pede snapshot anterior e calcula diff"| History
-    Agent -->|"4. salva o snapshot coletado (antes de chamar o LLM)"| History
-    History -->|"le e grava snapshots JSON"| ScansDir
+    User -->|"1. runs python agent.py --host --model"| Agent
+    Agent -->|"2. triggers the collections (processes, connections, startup items)"| Tools
+    Tools -->|"psutil / winreg / systemctl / crontab / autostart"| OS
+    Tools -->|"loaded once, at module import"| Whitelist
+    Agent -->|"3. asks for previous snapshot and computes diff"| History
+    Agent -->|"4. saves the collected snapshot (before calling the LLM)"| History
+    History -->|"reads and writes JSON snapshots"| ScansDir
     Agent -->|"5. POST /v1/chat/completions (prompt)"| LLM
-    LLM -->|"6. resposta com resumo"| Agent
-    Agent -->|"7. imprime resumo do scan"| Usuario
+    LLM -->|"6. response with summary"| Agent
+    Agent -->|"7. prints scan summary"| User
 ```
 
-Fonte: [`docs/diagramas/estrutural.mmd`](docs/diagramas/estrutural.mmd) —
-versão inicial: [`estrutural-v1.mmd`](docs/diagramas/estrutural-v1.mmd)
+Source: [`docs/diagrams/structural.mmd`](docs/diagrams/structural.mmd) -
+initial version: [`structural-v1.mmd`](docs/diagrams/structural-v1.mmd)
 
-### Fluxo principal — execução de um scan completo
+### Main flow - running a full scan
 
 ```mermaid
 sequenceDiagram
-    participant Usuario as Usuário
+    participant User as User
     participant Agent as agent.py
     participant Tools as tools.py
     participant Whitelist as whitelist.json
-    participant SO as Sistema Operacional do Host
+    participant OS as Host Operating System
     participant History as history.py
-    participant ScansDir as Diretorio de scans (scans/)
-    participant LLM as Servidor de Inferencia Local (llama-server / Ollama)
+    participant ScansDir as Scans directory (scans/)
+    participant LLM as Local Inference Server (llama-server / Ollama)
 
-    Usuario->>Agent: executa python agent.py --host --model
+    User->>Agent: runs python agent.py --host --model
 
-    Note over Agent,Whitelist: importacao dos modulos (antes de qualquer coleta)
-    Agent->>Tools: importa tools.py
-    Tools->>Whitelist: le whitelist.json (uma unica vez, na importacao)
-    Whitelist-->>Tools: nomes conhecidos (processos e itens de inicializacao)
-    Note over Tools: nomes ficam em memoria (sets) pelo resto da execucao
+    Note over Agent,Whitelist: module import (before any collection)
+    Agent->>Tools: imports tools.py
+    Tools->>Whitelist: reads whitelist.json (once, at import)
+    Whitelist-->>Tools: known names (processes and startup items)
+    Note over Tools: names stay in memory (sets) for the rest of the run
 
-    Agent->>Tools: lista processos em execucao
-    Tools->>SO: consulta processos (psutil)
-    SO-->>Tools: processos coletados
-    Tools->>Tools: marca processos conhecidos (checagem em memoria)
-    Tools-->>Agent: processos (com marcacao whitelisted)
+    Agent->>Tools: list running processes
+    Tools->>OS: query processes (psutil)
+    OS-->>Tools: processes collected
+    Tools->>Tools: flag known processes (in-memory check)
+    Tools-->>Agent: processes (with whitelisted flag)
 
-    Agent->>Tools: lista conexoes de rede ativas
-    Tools->>SO: consulta conexoes (psutil)
-    SO-->>Tools: conexoes coletadas
-    Tools-->>Agent: conexoes de rede
+    Agent->>Tools: list active network connections
+    Tools->>OS: query connections (psutil)
+    OS-->>Tools: connections collected
+    Tools-->>Agent: network connections
 
-    Agent->>Tools: lista itens de inicializacao
-    Tools->>SO: consulta itens de inicializacao
-    SO-->>Tools: itens coletados
-    Tools->>Tools: marca itens conhecidos (checagem em memoria)
-    Tools-->>Agent: itens de inicializacao (com marcacao whitelisted)
+    Agent->>Tools: list startup items
+    Tools->>OS: query startup items
+    OS-->>Tools: items collected
+    Tools->>Tools: flag known items (in-memory check)
+    Tools-->>Agent: startup items (with whitelisted flag)
 
-    Agent->>History: pede snapshot anterior mais recente
-    History->>ScansDir: le ultimo snapshot salvo
-    ScansDir-->>History: snapshot anterior (ou nenhum)
-    History-->>Agent: snapshot anterior
+    Agent->>History: ask for the most recent previous snapshot
+    History->>ScansDir: read last saved snapshot
+    ScansDir-->>History: previous snapshot (or none)
+    History-->>Agent: previous snapshot
 
-    Agent->>History: calcula diferenca com os dados atuais
-    History-->>Agent: diferencas (novos processos, conexoes e itens)
+    Agent->>History: compute difference against current data
+    History-->>Agent: differences (new processes, connections and items)
 
-    Agent->>History: salva snapshot coletado
-    History->>ScansDir: grava snapshot JSON timestampado
-    ScansDir-->>History: confirmacao (caminho do arquivo)
-    History-->>Agent: caminho do snapshot salvo
+    Agent->>History: save collected snapshot
+    History->>ScansDir: write timestamped JSON snapshot
+    ScansDir-->>History: confirmation (file path)
+    History-->>Agent: saved snapshot path
 
-    Agent->>Agent: monta prompt textual com dados coletados e diferencas
+    Agent->>Agent: build text prompt with collected data and differences
 
     Agent->>LLM: POST /v1/chat/completions (prompt)
-    LLM-->>Agent: resumo em portugues
+    LLM-->>Agent: summary in Portuguese
 
-    Agent->>Usuario: imprime resumo do scan
+    Agent->>User: prints scan summary
 ```
 
-Fonte: [`docs/diagramas/sequencia.mmd`](docs/diagramas/sequencia.mmd) —
-versão inicial: [`sequencia-v1.mmd`](docs/diagramas/sequencia-v1.mmd)
+Source: [`docs/diagrams/sequence.mmd`](docs/diagrams/sequence.mmd) -
+initial version: [`sequence-v1.mmd`](docs/diagrams/sequence-v1.mmd)
 
-### Cenário de falha — servidor de inferência fora do ar ou resposta inválida
+### Failure scenario - inference server down or invalid response
 
 ```mermaid
 sequenceDiagram
-    participant Usuario as Usuário
+    participant User as User
     participant Agent as agent.py
     participant Tools as tools.py
     participant History as history.py
-    participant ScansDir as Diretorio de scans (scans/)
-    participant LLM as Servidor de Inferencia Local (llama-server / Ollama)
+    participant ScansDir as Scans directory (scans/)
+    participant LLM as Local Inference Server (llama-server / Ollama)
 
-    Usuario->>Agent: executa python agent.py --host --model
+    User->>Agent: runs python agent.py --host --model
 
-    Note over Agent,Tools: coleta de processos, conexoes e itens de inicializacao (identico ao fluxo principal, ver sequencia.mmd)
-    Agent->>Tools: coleta dados do sistema
-    Tools-->>Agent: processos, conexoes e itens de inicializacao coletados
+    Note over Agent,Tools: collection of processes, connections and startup items (identical to the main flow, see sequence.mmd)
+    Agent->>Tools: collect system data
+    Tools-->>Agent: processes, connections and startup items collected
 
-    Agent->>History: pede snapshot anterior e calcula diferenca
-    History-->>Agent: snapshot anterior e diferencas
+    Agent->>History: ask for previous snapshot and compute difference
+    History-->>Agent: previous snapshot and differences
 
-    Agent->>History: salva snapshot coletado
-    History->>ScansDir: grava snapshot JSON timestampado
-    ScansDir-->>History: confirmacao (caminho do arquivo)
-    History-->>Agent: caminho do snapshot salvo
+    Agent->>History: save collected snapshot
+    History->>ScansDir: write timestamped JSON snapshot
+    ScansDir-->>History: confirmation (file path)
+    History-->>Agent: saved snapshot path
 
-    Note over Agent,ScansDir: o snapshot ja esta salvo em disco neste ponto, independente do que acontecer a seguir
+    Note over Agent,ScansDir: the snapshot is already on disk at this point, regardless of what happens next
 
-    Agent->>Agent: monta prompt textual com dados coletados e diferencas
+    Agent->>Agent: build text prompt with collected data and differences
 
-    alt Servidor fora do ar, recusa conexao ou responde com erro HTTP
+    alt Server is down, refuses the connection or responds with an HTTP error
         Agent->>LLM: POST /v1/chat/completions (prompt)
-        LLM--xAgent: falha de conexao (urllib.error.URLError) ou erro HTTP (urllib.error.HTTPError)
-        Agent->>Agent: imprime "[ERRO] Nao consegui falar com o servidor LLM em {host}" (ou o codigo HTTP e o corpo da resposta)
-        Agent->>Usuario: encerra o processo (sys.exit(1)) - nenhum resumo e exibido
-        Note over Agent: tratado explicitamente no codigo (agent.py, call_llm - except HTTPError / except URLError)
-    else Servidor responde HTTP 200, mas com corpo vazio, JSON invalido, ou sem "choices"/"message"/"content"
+        LLM--xAgent: connection failure (urllib.error.URLError) or HTTP error (urllib.error.HTTPError)
+        Agent->>Agent: prints "[ERROR] Could not reach the LLM server at {host}" (or the HTTP code and response body)
+        Agent->>User: terminates the process (sys.exit(1)) - no summary is shown
+        Note over Agent: explicitly handled in the code (agent.py, call_llm - except HTTPError / except URLError)
+    else Server responds HTTP 200 but with an empty body, invalid JSON, or without "choices"/"message"/"content"
         Agent->>LLM: POST /v1/chat/completions (prompt)
-        LLM-->>Agent: resposta HTTP 200 vazia, malformada ou com estrutura inesperada
-        Note over Agent: LACUNA NO CODIGO REAL - nao ha tratamento para este caso
-        Agent--xUsuario: processo encerra com excecao nao tratada (traceback), sem mensagem amigavel e sem sys.exit(1) controlado
+        LLM-->>Agent: HTTP 200 response that is empty, malformed or has an unexpected structure
+        Note over Agent: GAP IN THE REAL CODE - this case is not handled
+        Agent--xUser: process ends with an unhandled exception (traceback), with no friendly message and no controlled sys.exit(1)
     end
 ```
 
-Fonte: [`docs/diagramas/sequencia-falha.mmd`](docs/diagramas/sequencia-falha.mmd)
-— sem equivalente na v1, já que a primeira rodada de diagramas cobriu só o
-fluxo principal.
+Source: [`docs/diagrams/sequence-failure.mmd`](docs/diagrams/sequence-failure.mmd)
+- no equivalent in v1, since the first round of diagrams covered only the main
+flow.
 
-## Decisões e ajustes sobre o que o modelo gerou
+## Decisions and adjustments to what the model generated
 
-O primeiro diagrama estrutural e o primeiro diagrama de sequência
-(`estrutural-v1.mmd` e `sequencia-v1.mmd`, mantidos na pasta) foram
-desenhados só a partir da descrição em prosa, sem consultar o
-código-fonte — uma simulação de arquiteto sem acesso ao sistema real.
-Depois de ler o código e comparar em
-[`docs/comparacao-v1.md`](docs/comparacao-v1.md), apareceram dois erros
-concretos, os dois de ordem e de tempo, não de containers inventados. O
-diagrama de sequência da v1 colocava o salvamento do snapshot como último
-passo da jornada; no código, ele acontece antes de qualquer tentativa de
-falar com o modelo de linguagem, exatamente para que o histórico sobreviva
-mesmo que a chamada ao LLM falhe. O mesmo diagrama também tratava a
-consulta à whitelist como uma troca de mensagens repetida durante a
-coleta, quando na realidade o arquivo é lido uma única vez, na importação
-do módulo, e fica em memória dali em diante.
+The first structural diagram and the first sequence diagram
+(`structural-v1.mmd` and `sequence-v1.mmd`, kept in the folder) were drawn only
+from the prose description, without consulting the source code - a simulation of
+an architect without access to the real system. After reading the code and
+comparing in [`docs/v1-comparison.md`](docs/v1-comparison.md), two concrete
+errors appeared, both about order and timing, not about invented containers. The
+v1 sequence diagram placed the snapshot save as the last step of the journey; in
+the code, it happens before any attempt to talk to the language model, precisely
+so the history survives even if the LLM call fails. The same diagram also
+treated the whitelist lookup as a message exchange repeated during collection,
+when in reality the file is read only once, at module import, and stays in
+memory from then on.
 
-Os diagramas finais corrigem os dois pontos, e um terceiro diagrama, sem
-equivalente na v1, cobre o que acontece quando o servidor de inferência
-está fora do ar ou devolve uma resposta que o código não sabe interpretar
-— nesse segundo caso, o próprio sistema não trata o erro, e o diagrama
-registra isso como lacuna, não como comportamento correto. O relato
-completo, ajuste por ajuste, está em
-[`docs/decisoes-e-ajustes.md`](docs/decisoes-e-ajustes.md).
+The final diagrams fix both points, and a third diagram, with no equivalent in
+v1, covers what happens when the inference server is down or returns a response
+the code does not know how to interpret - in this second case, the system itself
+does not handle the error, and the diagram records that as a gap, not as correct
+behavior. The full account, adjustment by adjustment, is in
+[`docs/decisions-and-adjustments.md`](docs/decisions-and-adjustments.md).
 
-## O que um agente precisaria para construir sem inventar decisões
+## What an agent would need to build without inventing decisions
 
-Mesmo com a descrição e os diagramas corrigidos, ficam decisões que o
-código não toma — e que qualquer agente, humano ou automatizado, tentando
-reconstruir ou estender o PendriveAgent teria que inventar, porque nada no
-sistema diz o que fazer.
+Even with the description and the corrected diagrams, decisions remain that the
+code does not make - and that any agent, human or automated, trying to rebuild
+or extend PendriveAgent would have to invent, because nothing in the system says
+what to do.
 
-O formato do relatório de saída é um exemplo direto: hoje o resumo do LLM
-só é impresso no terminal, em texto solto, e não é salvo em lugar nenhum —
-nem junto do snapshot, nem em um arquivo separado. Um agente que
-precisasse de relatórios navegáveis, comparáveis entre execuções ou
-exportáveis teria que decidir sozinho onde e em que formato esse texto
-passaria a viver, porque o sistema atual simplesmente descarta o resumo
-assim que o processo termina.
+The output report format is a direct example: today the LLM summary is only
+printed to the terminal, as loose text, and is not saved anywhere - neither next
+to the snapshot nor in a separate file. An agent that needed navigable,
+comparable or exportable reports would have to decide on its own where and in
+what format this text would live, because the current system simply discards the
+summary as soon as the process ends.
 
-O critério de entrada na whitelist também não existe além de "editar o
-JSON à mão". Não há processo de proposta, aprovação ou expiração de itens,
-nem distinção entre o que foi adicionado por ser claramente seguro (um
-executável do próprio Windows) e o que foi adicionado só para silenciar um
-alerta incômodo. Uma automação que tentasse sugerir novos itens de
-whitelist a partir dos scans teria que definir esse critério do zero.
+The criterion for entering the whitelist also does not exist beyond "edit the
+JSON by hand". There is no process for proposing, approving or expiring items,
+nor a distinction between what was added because it is clearly safe (a Windows
+executable) and what was added just to silence an annoying alert. An automation
+trying to suggest new whitelist items from the scans would have to define that
+criterion from scratch.
 
-O mesmo vale para o limiar do diff entre scans: hoje "mudou" significa só
-"apareceu um nome que não estava no snapshot anterior" — uma comparação
-binária de presença e ausência, sem noção de tempo, frequência ou
-severidade. Um processo que aparece, some e reaparece a cada scan por um
-motivo legítimo geraria o mesmo alerta que um processo genuinamente novo e
-suspeito; decidir se isso importa, e como agrupar ou suprimir ruído desse
-tipo, fica inteiramente em aberto.
+The same goes for the diff threshold between scans: today "changed" means only
+"a name appeared that was not in the previous snapshot" - a binary
+presence/absence comparison, with no notion of time, frequency or severity. A
+process that appears, disappears and reappears on every scan for a legitimate
+reason would generate the same alert as a genuinely new and suspicious process;
+deciding whether that matters, and how to group or suppress that kind of noise,
+is left entirely open.
 
-A versão e os parâmetros do modelo de linguagem e do llama.cpp também não
-estão fixados em lugar nenhum que o código controle. O `README.md`
-original do sistema recomenda um modelo (Llama 3 8B, quantizado em
-Q4_K_M) e um tamanho de contexto como sugestão de configuração ao subir o
-`llama-server` manualmente, mas nada disso é imposto ou validado por
-`agent.py` — ele aceita qualquer `--model` e qualquer `--host`, sem checar
-se o servidor do outro lado é compatível ou está configurado como
-esperado.
+The version and parameters of the language model and of llama.cpp are also not
+pinned anywhere the code controls. The system's original `README.md` recommends
+a model (Llama 3 8B, quantized as Q4_K_M) and a context size as a configuration
+suggestion when manually starting `llama-server`, but none of that is enforced
+or validated by `agent.py` - it accepts any `--model` and any `--host`, without
+checking whether the server on the other side is compatible or configured as
+expected.
 
-O tratamento de erros da chamada ao LLM está descrito com precisão em
-`docs/descricao.md` e no diagrama de falha acima: conexão recusada e erro
-HTTP são tratados com uma mensagem e um `sys.exit(1)` controlado, mas
-resposta vazia, JSON inválido ou uma estrutura de resposta inesperada não
-têm nenhum tratamento — o processo simplesmente quebra com um traceback.
-Qualquer extensão do sistema teria que decidir se isso é aceitável para o
-caso de uso atual (um script rodado manualmente) ou se precisa de
-tratamento explícito antes de, por exemplo, rodar como tarefa agendada.
+Error handling of the LLM call is described precisely in `docs/description.md`
+and in the failure diagram above: connection refused and HTTP errors are handled
+with a message and a controlled `sys.exit(1)`, but an empty response, invalid
+JSON or an unexpected response structure has no handling - the process simply
+breaks with a traceback. Any extension of the system would have to decide whether
+that is acceptable for the current use case (a manually run script) or whether it
+needs explicit handling before, for example, running as a scheduled task.
 
-Por fim, as diferenças entre Windows e Linux na coleta de itens de
-inicialização não vêm de uma decisão documentada — são simplesmente o que
-foi implementado. No Windows, só as chaves de registro `Run` de usuário e
-de máquina são lidas, sem checagem do Agendador de Tarefas nem de
-serviços registrados. No Linux a cobertura é mais ampla (systemd, crontab,
-autostart de aplicações), mas não existe suporte a macOS em nenhuma parte
-do código. Um agente que precisasse de paridade entre plataformas teria
-que decidir se estende a cobertura do Windows para igualar a do Linux, ou
-se aceita a assimetria como está.
+Finally, the differences between Windows and Linux in startup item collection do
+not come from a documented decision - they are simply what was implemented. On
+Windows, only the user and machine `Run` registry keys are read, with no check of
+Task Scheduler or registered services. On Linux coverage is broader (systemd,
+crontab, application autostart), but there is no macOS support anywhere in the
+code. An agent that needed parity between platforms would have to decide whether
+to extend Windows coverage to match Linux's, or to accept the asymmetry as it is.
 
-## Observação sobre dados sensíveis
+## Note on sensitive data
 
-Este repositório é público. Ele descreve o **formato** de arquivos como
-`whitelist.json`, mas não reproduz nenhum conteúdo desse arquivo nem
-qualquer dado coletado de uma máquina real (nomes de processos específicos
-de um ambiente, caminhos pessoais, endereços IP, etc.).
+This repository is public. It describes the **format** of files such as
+`whitelist.json`, but reproduces no content of that file nor any data collected
+from a real machine (environment-specific process names, personal paths, IP
+addresses, etc.).
+
+## License
+
+[MIT](LICENSE)
