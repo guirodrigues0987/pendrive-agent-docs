@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant User as User
+    participant Agent as agent.py
+    participant Tools as tools.py
+    participant History as history.py
+    participant ScansDir as Scans directory (scans/)
+    participant LLM as Local Inference Server (llama-server / Ollama)
+
+    User->>Agent: runs python agent.py --host --model
+
+    Note over Agent,Tools: collection of processes, connections and startup items (identical to the main flow, see sequence.mmd)
+    Agent->>Tools: collect system data
+    Tools-->>Agent: processes, connections and startup items collected
+
+    Agent->>History: ask for previous snapshot and compute difference
+    History-->>Agent: previous snapshot and differences
+
+    Agent->>History: save collected snapshot
+    History->>ScansDir: write timestamped JSON snapshot
+    ScansDir-->>History: confirmation (file path)
+    History-->>Agent: saved snapshot path
+
+    Note over Agent,ScansDir: the snapshot is already on disk at this point, regardless of what happens next
+
+    Agent->>Agent: build text prompt with collected data and differences
+
+    alt Server is down, refuses the connection or responds with an HTTP error
+        Agent->>LLM: POST /v1/chat/completions (prompt)
+        LLM--xAgent: connection failure (urllib.error.URLError) or HTTP error (urllib.error.HTTPError)
+        Agent->>Agent: prints "[ERROR] Could not reach the LLM server at {host}" (or the HTTP code and response body)
+        Agent->>User: terminates the process (sys.exit(1)) - no summary is shown
+        Note over Agent: explicitly handled in the code (agent.py, call_llm - except HTTPError / except URLError)
+    else Server responds HTTP 200 but with an empty body, invalid JSON, or without "choices"/"message"/"content"
+        Agent->>LLM: POST /v1/chat/completions (prompt)
+        LLM-->>Agent: HTTP 200 response that is empty, malformed or has an unexpected structure
+        Note over Agent: GAP IN THE REAL CODE - this case is not handled
+        Agent--xUser: process ends with an unhandled exception (traceback), with no friendly message and no controlled sys.exit(1)
+    end

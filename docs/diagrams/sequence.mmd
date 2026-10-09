@@ -1,0 +1,54 @@
+sequenceDiagram
+    participant User as User
+    participant Agent as agent.py
+    participant Tools as tools.py
+    participant Whitelist as whitelist.json
+    participant OS as Host Operating System
+    participant History as history.py
+    participant ScansDir as Scans directory (scans/)
+    participant LLM as Local Inference Server (llama-server / Ollama)
+
+    User->>Agent: runs python agent.py --host --model
+
+    Note over Agent,Whitelist: module import (before any collection)
+    Agent->>Tools: imports tools.py
+    Tools->>Whitelist: reads whitelist.json (once, at import)
+    Whitelist-->>Tools: known names (processes and startup items)
+    Note over Tools: names stay in memory (sets) for the rest of the run
+
+    Agent->>Tools: list running processes
+    Tools->>OS: query processes (psutil)
+    OS-->>Tools: processes collected
+    Tools->>Tools: flag known processes (in-memory check)
+    Tools-->>Agent: processes (with whitelisted flag)
+
+    Agent->>Tools: list active network connections
+    Tools->>OS: query connections (psutil)
+    OS-->>Tools: connections collected
+    Tools-->>Agent: network connections
+
+    Agent->>Tools: list startup items
+    Tools->>OS: query startup items
+    OS-->>Tools: items collected
+    Tools->>Tools: flag known items (in-memory check)
+    Tools-->>Agent: startup items (with whitelisted flag)
+
+    Agent->>History: ask for the most recent previous snapshot
+    History->>ScansDir: read last saved snapshot
+    ScansDir-->>History: previous snapshot (or none)
+    History-->>Agent: previous snapshot
+
+    Agent->>History: compute difference against current data
+    History-->>Agent: differences (new processes, connections and items)
+
+    Agent->>History: save collected snapshot
+    History->>ScansDir: write timestamped JSON snapshot
+    ScansDir-->>History: confirmation (file path)
+    History-->>Agent: saved snapshot path
+
+    Agent->>Agent: build text prompt with collected data and differences
+
+    Agent->>LLM: POST /v1/chat/completions (prompt)
+    LLM-->>Agent: summary in Portuguese
+
+    Agent->>User: prints scan summary
